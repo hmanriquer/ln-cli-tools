@@ -1,4 +1,4 @@
-import { Box, Text, render, useInput } from "ink";
+import { Box, Static, Text, render, useInput } from "ink";
 import {
   Select,
   TextInput,
@@ -54,14 +54,27 @@ function getSnapshot(): Frame | null {
   return current;
 }
 
-/** Persistent shell: the wordmark stays pinned on top; the body swaps in place. */
+/** Stable single-item list so <Static> paints the header exactly once. */
+const HEADER_ITEMS: string[] = ["wordmark"];
+
+/**
+ * Persistent shell. The wordmark is painted once inside <Static> — Ink never
+ * re-renders Static output, so it stays pinned on top without flickering while
+ * the live body below (spinner, progress, file list) updates in place.
+ */
 function Shell() {
   const frame = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
   return (
-    <Box flexDirection="column" paddingX={1} paddingTop={1}>
-      <Wordmark />
+    <Box flexDirection="column">
+      <Static items={HEADER_ITEMS}>
+        {(item) => (
+          <Box key={item} paddingX={1} paddingTop={1}>
+            <Wordmark />
+          </Box>
+        )}
+      </Static>
       {frame ? (
-        <Box key={frame.key} flexDirection="column">
+        <Box key={frame.key} flexDirection="column" paddingX={1}>
           {frame.node}
         </Box>
       ) : null}
