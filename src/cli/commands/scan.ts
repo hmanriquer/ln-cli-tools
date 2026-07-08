@@ -1,10 +1,12 @@
 import path from "node:path";
-import * as p from "@clack/prompts";
 import pc from "picocolors";
+import { resolveEffort, resolveModel } from "../../config.js";
 import { computeExitCode, summarize } from "../../core/report.js";
 import type { HealthReport, Severity } from "../../core/types.js";
 import { discoverProjects } from "../../infra/discover.js";
 import { emitHtmlReport } from "../html.js";
+import { scanWithTui } from "../../ui/run.js";
+import type { RunHooks } from "../../ui/apps/RunApp.js";
 import { analyzeProject } from "./analyzeProject.js";
 import { resolveRoot } from "./check.js";
 
@@ -44,8 +46,14 @@ function renderScanSummary(scanRoot: string, reports: HealthReport[]): void {
       c.warning ? pc.yellow(`${c.warning} warn`) : "",
       c.info ? pc.cyan(`${c.info} info`) : "",
     ].filter(Boolean);
-    const verdict = c.error ? pc.red("✖") : c.warning ? pc.yellow("⚠") : pc.green("✓");
-    console.log(`  ${verdict} ${name} ${stacks}  ${parts.join(pc.dim(" · ")) || pc.green("clean")}`);
+    const verdict = c.error
+      ? pc.red("✖")
+      : c.warning
+        ? pc.yellow("⚠")
+        : pc.green("✓");
+    console.log(
+      `  ${verdict} ${name} ${stacks}  ${parts.join(pc.dim(" · ")) || pc.green("clean")}`,
+    );
   }
 
   const totals = reports.reduce(
@@ -60,7 +68,9 @@ function renderScanSummary(scanRoot: string, reports: HealthReport[]): void {
   );
   const totalLine = [
     SEV_COLOR.error(`${totals.error} error${totals.error === 1 ? "" : "s"}`),
-    SEV_COLOR.warning(`${totals.warning} warning${totals.warning === 1 ? "" : "s"}`),
+    SEV_COLOR.warning(
+      `${totals.warning} warning${totals.warning === 1 ? "" : "s"}`,
+    ),
     SEV_COLOR.info(`${totals.info} info`),
   ].join(pc.dim(" · "));
   console.log("");
@@ -70,42 +80,64 @@ function renderScanSummary(scanRoot: string, reports: HealthReport[]): void {
 
 export async function runScan(opts: ScanOptions): Promise<number> {
   const scanRoot = resolveRoot(opts.args[0] ?? ".");
+  const useTui = opts.interactive && !opts.json;
 
-  const discoverSpinner = opts.interactive ? p.spinner() : null;
-  discoverSpinner?.start("Discovering projects…");
-  const projectDirs = (await discoverProjects(scanRoot, { maxDepth: opts.depth })).map((d) =>
-    path.resolve(d),
-  );
-  discoverSpinner?.stop(`Found ${projectDirs.length} project${projectDirs.length === 1 ? "" : "s"}.`);
+  if (useTui || (!opts.json && !opts.interactive)) {
+    console.error(pc.dim("  discovering projects…"));
+  }
+  const projectDirs = (
+    await discoverProjects(scanRoot, { maxDepth: opts.depth })
+  ).map((d) => path.resolve(d));
 
   if (projectDirs.length === 0) {
-    console.error(pc.yellow(`No projects (package.json) found under ${scanRoot}.`));
+    console.error(
+      pc.yellow(`No projects (package.json) found under ${scanRoot}.`),
+    );
     return 0;
   }
 
-  const reports: HealthReport[] = [];
-  for (let i = 0; i < projectDirs.length; i += 1) {
-    const dir = projectDirs[i] as string;
-    const name = path.relative(scanRoot, dir) || path.basename(dir);
-    const label = `[${i + 1}/${projectDirs.length}] ${name}`;
+  const names = projectDirs.map(
+    (dir) => path.relative(scanRoot, dir) || path.basename(dir),
+  );
 
-    const spinner = opts.interactive ? p.spinner() : null;
-    spinner?.start(`${label} — analyzing…`);
-    if (!opts.interactive && !opts.json) console.error(pc.dim(`  ${label}…`));
-
-    const report = await analyzeProject({
-      root: dir,
+  const runOne = (index: number, hooks: RunHooks): Promise<HealthReport> =>
+    analyzeProject({
+      root: projectDirs[index] as string,
       ai: opts.ai,
       provider: opts.provider,
       model: opts.model,
       effort: opts.effort,
       stack: "auto",
-      onActivity: (line) => spinner?.message(`${label} · ${pc.dim(line)}`),
+      onActivity: hooks.onActivity,
+      onPhase: hooks.onPhase,
     });
-    reports.push(report);
 
-    const c = counts(report);
-    spinner?.stop(`${label} — ${c.error} err · ${c.warning} warn · ${c.info} info`);
+  let reports: HealthReport[];
+
+  if (useTui) {
+    reports = await scanWithTui(
+      names,
+      {
+        provider: opts.ai ? (opts.provider ?? "auto") : "probes only",
+        model: opts.ai ? (opts.model ?? resolveModel()) : undefined,
+        effort: opts.ai ? (opts.effort ?? resolveEffort()) : undefined,
+      },
+      runOne,
+    );
+  } else {
+    reports = [];
+    for (let i = 0; i < projectDirs.length; i += 1) {
+      const label = `[${i + 1}/${projectDirs.length}] ${names[i]}`;
+      if (!opts.json) console.error(pc.dim(`  ${label}…`));
+      reports.push(
+        await runOne(i, {
+          onPhase: () => {},
+          onActivity: (line) => {
+            if (!opts.json) console.error(pc.dim(`    → ${line}`));
+          },
+        }),
+      );
+    }
   }
 
   const allFindings = reports.flatMap((r) => r.findings);
@@ -118,7 +150,7 @@ export async function runScan(opts: ScanOptions): Promise<number> {
         2,
       ),
     );
-  } else {
+  } else if (!useTui) {
     renderScanSummary(scanRoot, reports);
   }
 

@@ -1,5 +1,3 @@
-import * as p from "@clack/prompts";
-import pc from "picocolors";
 import { resolveEffort, resolveModel } from "../config.js";
 import {
   credentialsDisplayPath,
@@ -24,6 +22,9 @@ import {
   promptForGitHubToken,
 } from "./interactive.js";
 import { selectMenuAction } from "../ui/menu.js";
+import { promptConfirm, promptSelect, promptText } from "../ui/prompts.js";
+import { logInfo, logSuccess, showPanel } from "../ui/notice.js";
+import { COLOR } from "../ui/theme.js";
 
 /**
  * Interactive, arrow-key menu (launched with `--ui` or the `ui` command).
@@ -69,7 +70,7 @@ export async function runMenu(): Promise<number> {
     });
 
     if (!choice || choice === "exit") {
-      p.outro(pc.dim(`Thanks for using ${APP_NAME}.`));
+      console.log(`\nThanks for using ${APP_NAME}.\n`);
       return lastExitCode;
     }
 
@@ -84,15 +85,15 @@ export async function runMenu(): Promise<number> {
         await manageCredentialsFlow();
         break;
       case "config":
-        showConfig();
+        await showConfig();
         break;
       case "about":
-        showAbout();
+        await showAbout();
         break;
     }
 
     if (!(await returnToMenu())) {
-      p.outro(pc.dim(`Thanks for using ${APP_NAME}.`));
+      console.log(`\nThanks for using ${APP_NAME}.\n`);
       return lastExitCode;
     }
   }
@@ -110,13 +111,11 @@ async function pickProvider(): Promise<ProviderId | undefined> {
   if (!first) return undefined;
   if (configured.length === 1) return first;
 
-  const choice = await p.select({
-    message: "Which AI provider?",
-    initialValue: first,
-    options: configured.map((id) => ({ value: id, label: providerLabel(id) })),
-  });
-  if (p.isCancel(choice)) return undefined;
-  return choice;
+  const choice = await promptSelect<ProviderId>(
+    "Which AI provider?",
+    configured.map((id) => ({ value: id, label: providerLabel(id) })),
+  );
+  return choice ?? undefined;
 }
 
 async function runCheckFlow(): Promise<number> {
@@ -149,18 +148,15 @@ async function runCheckFlow(): Promise<number> {
 
 /** Menu flow: scan a directory of projects and open the combined dashboard. */
 async function runScanFlow(): Promise<number> {
-  const dir = await p.text({
+  const dir = await promptText({
     message: "Directory to scan",
     placeholder: ".",
     defaultValue: ".",
   });
-  if (p.isCancel(dir)) return 0;
+  if (dir === null) return 0;
 
-  const wantAi = await p.confirm({
-    message: "Run AI analysis on each project?",
-    initialValue: true,
-  });
-  if (p.isCancel(wantAi)) return 0;
+  const wantAi = await promptConfirm("Run AI analysis on each project?", true);
+  if (wantAi === null) return 0;
 
   let ai = wantAi;
   if (ai && !resolveProviderId()) {
@@ -181,16 +177,13 @@ async function runScanFlow(): Promise<number> {
 
 /** Submenu: choose which credential to set, then prompt + (optionally) save it. */
 async function manageCredentialsFlow(): Promise<void> {
-  const which = await p.select({
-    message: "Which credential do you want to set?",
-    options: [
-      { value: "anthropic", label: "Anthropic API key", hint: "Claude" },
-      { value: "github", label: "GitHub token", hint: "GitHub Models" },
-      { value: "gemini", label: "Gemini API key", hint: "Google AI Studio" },
-      { value: "back", label: "Back" },
-    ],
-  });
-  if (p.isCancel(which) || which === "back") return;
+  const which = await promptSelect("Which credential do you want to set?", [
+    { value: "anthropic", label: "Anthropic API key", hint: "Claude" },
+    { value: "github", label: "GitHub token", hint: "GitHub Models" },
+    { value: "gemini", label: "Gemini API key", hint: "Google AI Studio" },
+    { value: "back", label: "Back" },
+  ]);
+  if (which === null || which === "back") return;
   if (which === "anthropic") await setAnthropicKey();
   else if (which === "github") await setGitHubToken();
   else await setGeminiKey();
@@ -202,9 +195,9 @@ async function setAnthropicKey(): Promise<void> {
   process.env.ANTHROPIC_API_KEY = result.key;
   if (result.save) {
     storeCredential("ANTHROPIC_API_KEY", result.key);
-    p.log.success(`Saved to ${pc.dim(credentialsDisplayPath())}.`);
+    logSuccess(`Saved to ${credentialsDisplayPath()}.`);
   } else {
-    p.log.info("Set for this session only.");
+    logInfo("Set for this session only.");
   }
 }
 
@@ -214,9 +207,9 @@ async function setGitHubToken(): Promise<void> {
   process.env.GITHUB_TOKEN = result.token;
   if (result.save) {
     storeCredential("GITHUB_TOKEN", result.token);
-    p.log.success(`Saved to ${pc.dim(credentialsDisplayPath())}.`);
+    logSuccess(`Saved to ${credentialsDisplayPath()}.`);
   } else {
-    p.log.info("Set for this session only.");
+    logInfo("Set for this session only.");
   }
 }
 
@@ -226,70 +219,62 @@ async function setGeminiKey(): Promise<void> {
   process.env.GEMINI_API_KEY = result.key;
   if (result.save) {
     storeCredential("GEMINI_API_KEY", result.key);
-    p.log.success(`Saved to ${pc.dim(credentialsDisplayPath())}.`);
+    logSuccess(`Saved to ${credentialsDisplayPath()}.`);
   } else {
-    p.log.info("Set for this session only.");
+    logInfo("Set for this session only.");
   }
 }
 
-function showConfig(): void {
+async function showConfig(): Promise<void> {
   const source = detectCredentialSource();
   const key = process.env.ANTHROPIC_API_KEY;
   const masked =
-    source === "api_key" && key
-      ? pc.dim(`  ${key.slice(0, 7)}…${key.slice(-4)}`)
-      : "";
+    source === "api_key" && key ? `  ${key.slice(0, 7)}…${key.slice(-4)}` : "";
   const authLine = source
-    ? pc.green(describeCredentialSource(source)) + masked
-    : pc.dim("no Anthropic auth");
+    ? describeCredentialSource(source) + masked
+    : "no Anthropic auth";
   const providerId = resolveProviderId();
   const providerLine = providerId
-    ? pc.green(providerLabel(providerId))
-    : pc.yellow("none configured");
+    ? providerLabel(providerId)
+    : "none configured";
   const gh = process.env.GITHUB_TOKEN ?? process.env.GH_TOKEN;
-  const ghLine = gh
-    ? pc.green("set") + pc.dim(`  ${gh.slice(0, 12)}…`)
-    : pc.dim("not set");
+  const ghLine = gh ? `set  ${gh.slice(0, 12)}…` : "not set";
   const gem = process.env.GEMINI_API_KEY ?? process.env.GOOGLE_API_KEY;
-  const gemLine = gem
-    ? pc.green("set") + pc.dim(`  ${gem.slice(0, 8)}…`)
-    : pc.dim("not set");
-  p.note(
-    [
-      `${pc.bold("Provider")}    ${providerLine}`,
-      `${pc.bold("Anthropic")}   ${authLine}`,
-      `${pc.bold("GitHub")}      ${ghLine}`,
-      `${pc.bold("Gemini")}      ${gemLine}`,
-      `${pc.bold("Stored at")}   ${pc.dim(credentialsDisplayPath())}`,
-      `${pc.bold("Model")}       ${resolveModel()}`,
-      `${pc.bold("Effort")}      ${resolveEffort()}`,
-    ].join("\n"),
+  const gemLine = gem ? `set  ${gem.slice(0, 8)}…` : "not set";
+  await showPanel(
     "Configuration",
+    [
+      `Provider    ${providerLine}`,
+      `Anthropic   ${authLine}`,
+      `GitHub      ${ghLine}`,
+      `Gemini      ${gemLine}`,
+      `Stored at   ${credentialsDisplayPath()}`,
+      `Model       ${resolveModel()}`,
+      `Effort      ${resolveEffort()}`,
+    ],
+    COLOR.info,
   );
 }
 
-function showAbout(): void {
-  p.note(
+async function showAbout(): Promise<void> {
+  await showPanel(
+    `About ${APP_NAME}`,
     [
-      `${pc.bold(APP_NAME)} ${pc.dim(AUTHOR)}`,
+      `${APP_NAME} ${AUTHOR}`,
       ``,
       `A read-only health-check multitool for React, Angular and Node.js`,
       `codebases. It runs deterministic probes and (optionally) an AI`,
       `investigation, then reports findings and recommendations.`,
       ``,
-      pc.dim("It never changes your code — you decide what to act on."),
+      `It never changes your code — you decide what to act on.`,
       ``,
-      `${pc.bold("CLI:")}  crystal-pulse check [stack] [path]   ${pc.dim("·")}   crystal-pulse check . --json`,
-    ].join("\n"),
-    `About ${APP_NAME}`,
+      `CLI:  crystal-pulse check [stack] [path]   ·   crystal-pulse check . --json`,
+    ],
+    COLOR.brandB,
   );
 }
 
 async function returnToMenu(): Promise<boolean> {
-  const again = await p.confirm({
-    message: "Return to the menu?",
-    initialValue: true,
-  });
-  if (p.isCancel(again)) return false;
-  return again;
+  const again = await promptConfirm("Return to the menu?", true);
+  return again === true;
 }

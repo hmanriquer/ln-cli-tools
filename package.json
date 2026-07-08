@@ -31,9 +31,7 @@
   "license": "MIT",
   "dependencies": {
     "@anthropic-ai/sdk": "^0.109.0",
-    "@clack/prompts": "^0.7.0",
     "@inkjs/ui": "^2.0.0",
-    "cfonts": "^3.3.1",
     "commander": "^12.1.0",
     "fast-glob": "^3.3.2",
     "ink": "^5.2.1",
