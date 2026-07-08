@@ -8,8 +8,13 @@ import {
   loadStoredCredentials,
   storeCredential,
 } from "../infra/credentials.js";
-import { providerConfigured, providerLabel, resolveProviderId, type ProviderId } from "../ai/providers.js";
-import { APP_NAME, AUTHOR, printWordmark } from "./brand.js";
+import {
+  providerConfigured,
+  providerLabel,
+  resolveProviderId,
+  type ProviderId,
+} from "../ai/providers.js";
+import { APP_NAME, AUTHOR } from "./brand.js";
 import { runCheck } from "./commands/check.js";
 import { runScan } from "./commands/scan.js";
 import {
@@ -18,7 +23,7 @@ import {
   promptForGeminiKey,
   promptForGitHubToken,
 } from "./interactive.js";
-import { renderNoKeyWarning } from "./render.js";
+import { selectMenuAction } from "../ui/menu.js";
 
 /**
  * Interactive, arrow-key menu (launched with `--ui` or the `ui` command).
@@ -26,7 +31,9 @@ import { renderNoKeyWarning } from "./render.js";
  */
 export async function runMenu(): Promise<number> {
   if (!process.stdout.isTTY) {
-    console.error("The interactive menu (--ui) requires a real terminal (TTY).");
+    console.error(
+      "The interactive menu (--ui) requires a real terminal (TTY).",
+    );
     return 1;
   }
 
@@ -35,24 +42,33 @@ export async function runMenu(): Promise<number> {
 
   for (;;) {
     console.clear();
-    printWordmark();
-    if (!resolveProviderId()) {
-      renderNoKeyWarning('Pick "Set API key", run `ant auth login`, or set GITHUB_TOKEN.');
-    }
-
-    const choice = await p.select({
-      message: "What would you like to do?",
+    const choice = await selectMenuAction({
       options: [
-        { value: "check", label: "Run a health check", hint: "one project + HTML report" },
-        { value: "scan", label: "Scan multiple projects", hint: "folder of repos → dashboard" },
-        { value: "creds", label: "Manage credentials", hint: "API key / GitHub token" },
+        {
+          value: "check",
+          label: "Run a health check",
+          hint: "one project + HTML report",
+        },
+        {
+          value: "scan",
+          label: "Scan multiple projects",
+          hint: "folder of repos → dashboard",
+        },
+        {
+          value: "creds",
+          label: "Manage credentials",
+          hint: "API key / GitHub token",
+        },
         { value: "config", label: "Show configuration" },
         { value: "about", label: `About ${APP_NAME}` },
         { value: "exit", label: "Exit" },
       ],
+      noKeyHint: resolveProviderId()
+        ? undefined
+        : 'Pick "Manage credentials", run `ant auth login`, or set GITHUB_TOKEN.',
     });
 
-    if (p.isCancel(choice) || choice === "exit") {
+    if (!choice || choice === "exit") {
       p.outro(pc.dim(`Thanks for using ${APP_NAME}.`));
       return lastExitCode;
     }
@@ -133,10 +149,17 @@ async function runCheckFlow(): Promise<number> {
 
 /** Menu flow: scan a directory of projects and open the combined dashboard. */
 async function runScanFlow(): Promise<number> {
-  const dir = await p.text({ message: "Directory to scan", placeholder: ".", defaultValue: "." });
+  const dir = await p.text({
+    message: "Directory to scan",
+    placeholder: ".",
+    defaultValue: ".",
+  });
   if (p.isCancel(dir)) return 0;
 
-  const wantAi = await p.confirm({ message: "Run AI analysis on each project?", initialValue: true });
+  const wantAi = await p.confirm({
+    message: "Run AI analysis on each project?",
+    initialValue: true,
+  });
   if (p.isCancel(wantAi)) return 0;
 
   let ai = wantAi;
@@ -212,14 +235,25 @@ async function setGeminiKey(): Promise<void> {
 function showConfig(): void {
   const source = detectCredentialSource();
   const key = process.env.ANTHROPIC_API_KEY;
-  const masked = source === "api_key" && key ? pc.dim(`  ${key.slice(0, 7)}…${key.slice(-4)}`) : "";
-  const authLine = source ? pc.green(describeCredentialSource(source)) + masked : pc.dim("no Anthropic auth");
+  const masked =
+    source === "api_key" && key
+      ? pc.dim(`  ${key.slice(0, 7)}…${key.slice(-4)}`)
+      : "";
+  const authLine = source
+    ? pc.green(describeCredentialSource(source)) + masked
+    : pc.dim("no Anthropic auth");
   const providerId = resolveProviderId();
-  const providerLine = providerId ? pc.green(providerLabel(providerId)) : pc.yellow("none configured");
+  const providerLine = providerId
+    ? pc.green(providerLabel(providerId))
+    : pc.yellow("none configured");
   const gh = process.env.GITHUB_TOKEN ?? process.env.GH_TOKEN;
-  const ghLine = gh ? pc.green("set") + pc.dim(`  ${gh.slice(0, 12)}…`) : pc.dim("not set");
+  const ghLine = gh
+    ? pc.green("set") + pc.dim(`  ${gh.slice(0, 12)}…`)
+    : pc.dim("not set");
   const gem = process.env.GEMINI_API_KEY ?? process.env.GOOGLE_API_KEY;
-  const gemLine = gem ? pc.green("set") + pc.dim(`  ${gem.slice(0, 8)}…`) : pc.dim("not set");
+  const gemLine = gem
+    ? pc.green("set") + pc.dim(`  ${gem.slice(0, 8)}…`)
+    : pc.dim("not set");
   p.note(
     [
       `${pc.bold("Provider")}    ${providerLine}`,
@@ -252,7 +286,10 @@ function showAbout(): void {
 }
 
 async function returnToMenu(): Promise<boolean> {
-  const again = await p.confirm({ message: "Return to the menu?", initialValue: true });
+  const again = await p.confirm({
+    message: "Return to the menu?",
+    initialValue: true,
+  });
   if (p.isCancel(again)) return false;
   return again;
 }

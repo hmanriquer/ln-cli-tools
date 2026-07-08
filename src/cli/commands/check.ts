@@ -1,13 +1,14 @@
 import { existsSync, statSync } from "node:fs";
 import path from "node:path";
-import * as p from "@clack/prompts";
 import pc from "picocolors";
+import { resolveEffort, resolveModel } from "../../config.js";
 import { computeExitCode } from "../../core/report.js";
-import type { Stack } from "../../core/types.js";
+import type { HealthReport, Stack } from "../../core/types.js";
 import { KNOWN_STACKS } from "../../probes/registry.js";
 import { renderJson, renderReport } from "../render.js";
 import { emitHtmlReport } from "../html.js";
-import { analyzeProject } from "./analyzeProject.js";
+import { runWithTui } from "../../ui/run.js";
+import { analyzeProject, type PhaseEvent } from "./analyzeProject.js";
 
 export interface CheckOptions {
   /** Positional args as given (0–2): may be [stack], [path], or [stack, path]. */
@@ -38,13 +39,17 @@ function isStack(value: string): value is Stack {
 }
 
 /** Turn loose positionals (`react ./app`, `./app`, `node`, ``) into a stack + path. */
-function resolveArgs(opts: CheckOptions): { stack: Stack | "auto"; path: string } {
+function resolveArgs(opts: CheckOptions): {
+  stack: Stack | "auto";
+  path: string;
+} {
   if (opts.stack || opts.path) {
     return { stack: opts.stack ?? "auto", path: opts.path ?? "." };
   }
   const [a, b] = opts.args;
   if (a && b) return { stack: isStack(a) ? a : "auto", path: b };
-  if (a) return isStack(a) ? { stack: a, path: "." } : { stack: "auto", path: a };
+  if (a)
+    return isStack(a) ? { stack: a, path: "." } : { stack: "auto", path: a };
   return { stack: "auto", path: "." };
 }
 
@@ -60,27 +65,45 @@ export async function runCheck(opts: CheckOptions): Promise<number> {
   const { stack, path: rawPath } = resolveArgs(opts);
   const root = resolveRoot(rawPath);
 
-  const spinner = opts.interactive ? p.spinner() : null;
-  spinner?.start("Analyzing…");
-  if (!opts.interactive && !opts.json && opts.ai) console.error(pc.dim("  analyzing…"));
+  const execute = (hooks: {
+    onPhase: (event: PhaseEvent) => void;
+    onActivity: (line: string) => void;
+  }): Promise<HealthReport> =>
+    analyzeProject({
+      root,
+      ai: opts.ai,
+      provider: opts.provider,
+      model: opts.model,
+      effort: opts.effort,
+      stacks: opts.stacks,
+      stack,
+      onActivity: hooks.onActivity,
+      onPhase: hooks.onPhase,
+    });
 
-  const report = await analyzeProject({
-    root,
-    ai: opts.ai,
-    provider: opts.provider,
-    model: opts.model,
-    effort: opts.effort,
-    stacks: opts.stacks,
-    stack,
-    onActivity: (line) => {
-      if (spinner) spinner.message(`Analyzing · ${pc.dim(line)}`);
-      else if (!opts.json) console.error(pc.dim(`    → ${line}`));
-    },
-  });
-  spinner?.stop("Analysis complete.");
+  let report: HealthReport;
 
-  if (opts.json) renderJson(report);
-  else renderReport(report);
+  if (opts.interactive && !opts.json) {
+    // Live TUI panel drives the run and renders the report on completion.
+    report = await runWithTui(
+      {
+        provider: opts.ai ? (opts.provider ?? "auto") : "probes only",
+        model: opts.ai ? (opts.model ?? resolveModel()) : undefined,
+        effort: opts.ai ? (opts.effort ?? resolveEffort()) : undefined,
+      },
+      execute,
+    );
+  } else {
+    if (!opts.json && opts.ai) console.error(pc.dim("  analyzing…"));
+    report = await execute({
+      onPhase: () => {},
+      onActivity: (line) => {
+        if (!opts.json) console.error(pc.dim(`    → ${line}`));
+      },
+    });
+    if (opts.json) renderJson(report);
+    else renderReport(report);
+  }
 
   if (opts.html) {
     const outPath = opts.out ?? path.join(root, "crystal-pulse-report.html");
