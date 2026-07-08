@@ -1,5 +1,5 @@
 import { Box, Text, useApp, useInput } from "ink";
-import { Spinner } from "@inkjs/ui";
+import { Spinner, ProgressBar } from "@inkjs/ui";
 import { useEffect, useRef, useState } from "react";
 import type { HealthReport, Severity } from "../../core/types.js";
 import { summarize } from "../../core/report.js";
@@ -125,6 +125,7 @@ export function ScanApp({ projects, meta, runOne, onDone }: ScanAppProps) {
   }, [projects, runOne, onDone, exit]);
 
   const done = rows.filter((r) => r.status === "done").length;
+  const progress = Math.round((done / Math.max(1, projects.length)) * 100);
   const totals = rows.reduce(
     (acc, r) => {
       if (r.counts) {
@@ -152,6 +153,18 @@ export function ScanApp({ projects, meta, runOne, onDone }: ScanAppProps) {
         {rows.map((row) => (
           <ProjectRow key={row.name} row={row} />
         ))}
+      </Box>
+
+      <Box flexDirection="column" marginTop={1}>
+        <Text color={COLOR.muted}>
+          {complete ? "Scan complete" : "Analyzing projects…"}
+        </Text>
+        <Box>
+          <Box width={34}>
+            <ProgressBar value={complete ? 100 : progress} />
+          </Box>
+          <Text color={COLOR.muted}> {complete ? 100 : progress}%</Text>
+        </Box>
       </Box>
 
       {!complete && files.length ? (

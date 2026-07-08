@@ -1,4 +1,5 @@
-import { Box, useApp, useInput } from "ink";
+import { Box, Text, useApp, useInput } from "ink";
+import { ProgressBar } from "@inkjs/ui";
 import { useEffect, useRef, useState } from "react";
 import type { HealthReport } from "../../core/types.js";
 import type {
@@ -112,6 +113,9 @@ export function RunApp({ meta, execute, onDone }: RunAppProps) {
       });
   }, [execute, exit, onDone]);
 
+  const doneCount = tasks.filter((t) => t.status === "done").length;
+  const progress = report ? 100 : Math.round((doneCount / tasks.length) * 100);
+
   const footer = (
     <FooterBar
       items={[
@@ -136,6 +140,15 @@ export function RunApp({ meta, execute, onDone }: RunAppProps) {
   return (
     <Box flexDirection="column">
       <TaskList tasks={tasks} />
+      <Box flexDirection="column" marginTop={1}>
+        <Text color={COLOR.muted}>{status.label}</Text>
+        <Box>
+          <Box width={34}>
+            <ProgressBar value={progress} />
+          </Box>
+          <Text color={COLOR.muted}> {progress}%</Text>
+        </Box>
+      </Box>
       <Box marginTop={1}>
         <StatusHex
           label={status.label}
