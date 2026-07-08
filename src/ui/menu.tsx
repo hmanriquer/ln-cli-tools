@@ -618,6 +618,8 @@ export interface UiHost {
     runOne: (index: number, hooks: RunHooks) => Promise<HealthReport>,
     onComplete: (reports: HealthReport[]) => void,
   ): Promise<HealthReport[]>;
+  /** Clear the terminal and remount a fresh screen (new-session look). */
+  reset(): Promise<void>;
   close(): Promise<void>;
 }
 
@@ -627,8 +629,11 @@ export interface UiHost {
  * panel, or run/scan view replaces the body in place (no stacking, no clutter).
  */
 export function createUiHost(): UiHost {
-  console.clear();
-  const instance = render(<Shell />);
+  function mount() {
+    console.clear();
+    return render(<Shell />);
+  }
+  let instance = mount();
 
   return {
     menu: ({ options, noKeyHint }) =>
@@ -714,6 +719,12 @@ export function createUiHost(): UiHost {
       setNode(null);
       instance.unmount();
       await instance.waitUntilExit();
+    },
+    reset: async () => {
+      setNode(null);
+      instance.unmount();
+      await instance.waitUntilExit();
+      instance = mount();
     },
   };
 }

@@ -40,9 +40,14 @@ export async function runMenu(): Promise<number> {
   loadStoredCredentials();
   const ui = createUiHost();
   let lastExitCode = 0;
+  let freshen = false;
 
   try {
     for (;;) {
+      // After a full-screen run/scan, return to a clean, brand-new screen.
+      if (freshen) await ui.reset();
+      freshen = false;
+
       const choice = await ui.menu({
         options: [
           {
@@ -74,9 +79,11 @@ export async function runMenu(): Promise<number> {
       switch (choice) {
         case "check":
           lastExitCode = await runCheckFlow(ui);
+          freshen = true;
           break;
         case "scan":
           lastExitCode = await runScanFlow(ui);
+          freshen = true;
           break;
         case "creds":
           await manageCredentialsFlow(ui);
