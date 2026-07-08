@@ -1,11 +1,15 @@
 import pc from "picocolors";
 import type { Finding, HealthReport, Severity } from "../core/types.js";
 import { summarize } from "../core/report.js";
-import { APP_NAME, SHORT_TAGLINE } from "./brand.js";
+import { APP_NAME, AUTHOR, SHORT_TAGLINE } from "./brand.js";
 
 type Colorize = (text: string) => string;
 
-const SYMBOL: Record<Severity, string> = { error: "✖", warning: "⚠", info: "•" };
+const SYMBOL: Record<Severity, string> = {
+  error: "✖",
+  warning: "⚠",
+  info: "•",
+};
 const SEV_COLOR: Record<Severity, Colorize> = {
   error: pc.red,
   warning: pc.yellow,
@@ -37,7 +41,9 @@ function box(lines: string[], border: Colorize = pc.dim): string[] {
 
 /** Boxed title banner. Printed once at the top of a run (never in --json). */
 export function renderBanner(): void {
-  const title = `${pc.cyan("✦")} ${pc.bold(pc.cyan(APP_NAME))}  ${pc.dim(`· ${SHORT_TAGLINE}`)}`;
+  const tagline = pc.dim(`· ${SHORT_TAGLINE}`);
+  const author = pc.bold(pc.magenta(AUTHOR));
+  const title = `${pc.cyan("✦")} ${pc.bold(pc.cyan(APP_NAME))}  ${author}  ${tagline}`;
   console.log("");
   for (const line of box([title], pc.cyan)) console.log(line);
 }
@@ -48,7 +54,8 @@ export function renderBanner(): void {
  */
 export function renderNoKeyWarning(hint?: string): void {
   const detail =
-    hint ?? "Set ANTHROPIC_API_KEY, run `ant auth login` for OAuth, or pass --no-ai to skip AI.";
+    hint ??
+    "Set ANTHROPIC_API_KEY, run `ant auth login` for OAuth, or pass --no-ai to skip AI.";
   const lines = [
     `${pc.yellow("⚠")}  ${pc.bold(pc.yellow("No Anthropic credentials detected"))}${pc.dim(" — AI analysis is disabled.")}`,
     pc.dim(detail),
@@ -58,7 +65,11 @@ export function renderNoKeyWarning(hint?: string): void {
 }
 
 function groupBySeverity(findings: Finding[]): Record<Severity, Finding[]> {
-  const groups: Record<Severity, Finding[]> = { error: [], warning: [], info: [] };
+  const groups: Record<Severity, Finding[]> = {
+    error: [],
+    warning: [],
+    info: [],
+  };
   for (const f of findings) groups[f.severity].push(f);
   return groups;
 }
@@ -69,7 +80,8 @@ function renderFinding(f: Finding): string[] {
   const lines = [`  ${color(SYMBOL[f.severity])} ${color(f.title)} ${tag}`];
   if (f.file) lines.push(pc.dim(`      ${f.file}`));
   if (f.detail) lines.push(pc.dim("      ") + f.detail);
-  if (f.recommendation) lines.push(`      ${pc.green("→")} ${pc.green(f.recommendation)}`);
+  if (f.recommendation)
+    lines.push(`      ${pc.green("→")} ${pc.green(f.recommendation)}`);
   return lines;
 }
 
@@ -90,7 +102,9 @@ export function renderReport(report: HealthReport): void {
 
   console.log("");
   console.log(`${pc.dim("target:")} ${report.root}`);
-  console.log(`${pc.dim("stacks:")} ${report.stacks.join(", ") || pc.dim("unknown")}`);
+  console.log(
+    `${pc.dim("stacks:")} ${report.stacks.join(", ") || pc.dim("unknown")}`,
+  );
   console.log("");
 
   if (findings.length === 0) {
@@ -117,8 +131,12 @@ export function renderReport(report: HealthReport): void {
 
 function renderSummaryBox(counts: Record<Severity, number>): void {
   const parts = [
-    counts.error ? pc.red(`${counts.error} error${counts.error > 1 ? "s" : ""}`) : "",
-    counts.warning ? pc.yellow(`${counts.warning} warning${counts.warning > 1 ? "s" : ""}`) : "",
+    counts.error
+      ? pc.red(`${counts.error} error${counts.error > 1 ? "s" : ""}`)
+      : "",
+    counts.warning
+      ? pc.yellow(`${counts.warning} warning${counts.warning > 1 ? "s" : ""}`)
+      : "",
     counts.info ? pc.cyan(`${counts.info} info`) : "",
   ].filter(Boolean);
 
@@ -135,7 +153,9 @@ function renderSummaryBox(counts: Record<Severity, number>): void {
     border = pc.green;
   }
 
-  const summaryLine = parts.length ? parts.join(pc.dim(" · ")) : pc.green("clean");
+  const summaryLine = parts.length
+    ? parts.join(pc.dim(" · "))
+    : pc.green("clean");
   for (const line of box([summaryLine, verdict], border)) console.log(line);
   console.log("");
 }

@@ -6,10 +6,10 @@ import type { Finding, HealthReport, Severity } from "../core/types.js";
 import { openInBrowser, writeReport } from "../infra/reportOutput.js";
 import { APP_NAME, AUTHOR } from "./brand.js";
 
-const SEV: Record<Severity, { icon: string; label: string }> = {
-  error: { icon: "✖", label: "err" },
-  warning: { icon: "⚠", label: "warn" },
-  info: { icon: "•", label: "info" },
+const SEV: Record<Severity, { icon: string; label: string; full: string }> = {
+  error: { icon: "✖", label: "err", full: "Error" },
+  warning: { icon: "⚠", label: "warn", full: "Warning" },
+  info: { icon: "•", label: "info", full: "Info" },
 };
 
 function escapeHtml(text: string): string {
@@ -35,12 +35,17 @@ function chip(cls: Severity | "ok", n: number, label: string): string {
 }
 
 function countChips(counts: Record<Severity, number>): string {
-  return chip("error", counts.error, "err") + chip("warning", counts.warning, "warn") + chip("info", counts.info, "info");
+  return (
+    chip("error", counts.error, "err") +
+    chip("warning", counts.warning, "warn") +
+    chip("info", counts.info, "info")
+  );
 }
 
 function bar(counts: Record<Severity, number>): string {
   const total = counts.error + counts.warning + counts.info;
-  if (total === 0) return '<div class="bar"><span class="seg ok" style="width:100%"></span></div>';
+  if (total === 0)
+    return '<div class="bar"><span class="seg ok" style="width:100%"></span></div>';
   const pct = (n: number) => `${((n / total) * 100).toFixed(2)}%`;
   return (
     '<div class="bar">' +
@@ -55,26 +60,68 @@ function renderFinding(f: Finding): string {
   const sev = SEV[f.severity];
   const tag = f.source === "ai" ? "AI" : "probe";
   const search = escapeHtml(
-    [f.title, f.detail, f.file, f.recommendation].filter(Boolean).join(" ").toLowerCase(),
+    [f.title, f.detail, f.file, f.recommendation]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase(),
   );
   const lines = [
     `<div class="finding f-${f.severity}" data-sev="${f.severity}" data-search="${search}">`,
     `<div class="f-head"><span class="f-icon ${f.severity}">${sev.icon}</span>` +
-      `<span class="f-title">${escapeHtml(f.title)}</span><span class="f-tag">${tag}</span></div>`,
+      `<span class="f-title">${escapeHtml(f.title)}</span>` +
+      `<span class="f-badges"><span class="f-sev ${f.severity}">${sev.full}</span>` +
+      `<span class="f-tag">${tag}</span></span></div>`,
   ];
   if (f.file) lines.push(`<div class="f-file">${escapeHtml(f.file)}</div>`);
-  if (f.detail) lines.push(`<div class="f-detail">${escapeHtml(f.detail)}</div>`);
-  if (f.recommendation) lines.push(`<div class="f-rec">→ ${escapeHtml(f.recommendation)}</div>`);
+  if (f.detail)
+    lines.push(`<div class="f-detail">${escapeHtml(f.detail)}</div>`);
+  if (f.recommendation)
+    lines.push(
+      `<div class="f-rec"><span class="f-rec-i">→</span> ${escapeHtml(f.recommendation)}</div>`,
+    );
   lines.push("</div>");
   return lines.join("");
+}
+
+/**
+ * Turn a raw AI narrative into clean prose for display. Some providers return
+ * the whole `{ narrative, findings }` payload as text; extract just the
+ * narrative. Strips ```json fences, and drops the block entirely when the text
+ * is a bare JSON blob with no usable prose.
+ */
+function cleanNarrative(raw: string): string {
+  let text = raw.trim();
+  const fence = /^```(?:json)?\n?([\s\S]*?)\n?```$/i.exec(text);
+  if (fence?.[1]) text = fence[1].trim();
+
+  if (text.startsWith("{") || text.startsWith("[")) {
+    try {
+      const parsed = JSON.parse(text) as unknown;
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        const narrative = (parsed as Record<string, unknown>)["narrative"];
+        if (typeof narrative === "string" && narrative.trim())
+          return narrative.trim();
+      }
+      // Parsed as JSON but no usable narrative — nothing worth showing.
+      return "";
+    } catch {
+      // Not valid JSON; fall through and show the text as-is.
+    }
+  }
+  return text;
 }
 
 function renderProject(report: HealthReport, scanRoot?: string): string {
   const counts = summarize(report.findings);
   const name = projectName(report.root, scanRoot);
-  const badges = report.stacks.map((s) => `<span class="badge">${escapeHtml(s)}</span>`).join("");
-  const ai = report.ai?.narrative
-    ? `<div class="ai"><div class="ai-h">AI summary</div><div class="ai-body">${escapeHtml(report.ai.narrative)}</div></div>`
+  const badges = report.stacks
+    .map((s) => `<span class="badge">${escapeHtml(s)}</span>`)
+    .join("");
+  const narrative = report.ai?.narrative
+    ? cleanNarrative(report.ai.narrative)
+    : "";
+  const ai = narrative
+    ? `<div class="ai"><div class="ai-h">AI summary</div><div class="ai-body">${escapeHtml(narrative)}</div></div>`
     : report.ai?.skipped
       ? `<div class="ai skipped">AI analysis skipped: ${escapeHtml(report.ai.skipped)}</div>`
       : "";
@@ -98,60 +145,116 @@ function renderProject(report: HealthReport, scanRoot?: string): string {
     '<div class="p-body">' +
     `<div class="path">${escapeHtml(report.root)}</div>` +
     bar(counts) +
+    fixBlock +
     ai +
     `<div class="findings">${findings}</div>` +
     '<div class="filtered-note">No findings match the current filter.</div>' +
-    fixBlock +
     "</div>" +
     "</details>"
   );
 }
 
 const STYLE = `
-:root{--bg:#f6f7f9;--panel:#fff;--fg:#1c2024;--muted:#6b7280;--border:#e4e6eb;
---error:#d1383d;--warning:#b7791f;--info:#1a76d2;--ok:#178a5a}
-@media(prefers-color-scheme:dark){:root{--bg:#0f1216;--panel:#161a20;--fg:#e6e8eb;--muted:#9aa4b2;--border:#262b33;
---error:#ff6169;--warning:#e2b23a;--info:#5ab0ff;--ok:#3ecf8e}}
+:root{--bg:#eef1f6;--panel:#fff;--panel-2:#f7f9fc;--fg:#1b2230;--muted:#657085;--border:#e2e7f0;
+--error:#e0393f;--warning:#c07f16;--info:#1a76d2;--ok:#12a06a;
+--brand-a:#22b8cf;--brand-b:#d6499b;--shadow:0 1px 2px rgba(20,30,50,.06),0 8px 24px rgba(20,30,50,.06)}
+@media(prefers-color-scheme:dark){:root{--bg:#0c0f14;--panel:#151a22;--panel-2:#1b212b;--fg:#e6e9ef;--muted:#94a0b3;--border:#252c38;
+--error:#ff6169;--warning:#e6bb46;--info:#5ab0ff;--ok:#3ed99a;
+--brand-a:#38d6e6;--brand-b:#ff63b3;--shadow:0 1px 2px rgba(0,0,0,.3),0 10px 30px rgba(0,0,0,.35)}}
 *{box-sizing:border-box}
-body{margin:0;font:14px/1.55 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;background:var(--bg);color:var(--fg)}
-header.top{position:sticky;top:0;z-index:5;background:var(--panel);border-bottom:1px solid var(--border);padding:14px 20px}
-.brand{font-size:18px;font-weight:700}.brand .author{font-weight:400;color:var(--muted);font-size:13px;margin-left:6px}
-.meta{color:var(--muted);font-size:12px;margin-top:2px}.totals{margin-top:8px}
-.toolbar{position:sticky;top:74px;z-index:4;display:flex;gap:12px;align-items:center;flex-wrap:wrap;
-background:var(--bg);border-bottom:1px solid var(--border);padding:10px 20px}
-.toolbar label{color:var(--fg);font-size:13px;cursor:pointer}.toolbar .spacer{flex:1}
-.toolbar input[type=search]{padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--panel);color:var(--fg);min-width:200px}
-.toolbar button{padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--panel);color:var(--fg);cursor:pointer}
-main{padding:16px 20px;max-width:1000px;margin:0 auto}
-.chip{display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px;font-weight:600;margin-right:6px;color:#fff}
+body{margin:0;font:14px/1.6 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;background:var(--bg);color:var(--fg);
+-webkit-font-smoothing:antialiased}
+a{color:var(--info)}
+/* Hero */
+header.hero{position:relative;overflow:hidden;background:
+radial-gradient(1200px 300px at 10% -40%,color-mix(in srgb,var(--brand-a) 40%,transparent),transparent),
+radial-gradient(1000px 300px at 90% -60%,color-mix(in srgb,var(--brand-b) 40%,transparent),transparent),var(--panel);
+border-bottom:1px solid var(--border)}
+.hero-inner{max-width:1040px;margin:0 auto;padding:26px 24px 20px}
+.brand{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.brand-name{font-size:30px;font-weight:800;letter-spacing:-.02em;line-height:1;
+background:linear-gradient(90deg,var(--brand-a),var(--brand-b));-webkit-background-clip:text;background-clip:text;color:transparent}
+.brand-author{font-size:12px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;color:#fff;
+padding:4px 12px;border-radius:999px;background:linear-gradient(90deg,var(--brand-a),var(--brand-b));
+box-shadow:0 2px 8px color-mix(in srgb,var(--brand-b) 40%,transparent)}
+.meta{color:var(--muted);font-size:12.5px;margin-top:10px}
+/* Stat cards */
+.stats{display:flex;gap:12px;flex-wrap:wrap;margin-top:16px}
+.stat{flex:1;min-width:120px;background:var(--panel);border:1px solid var(--border);border-radius:12px;
+padding:12px 14px;box-shadow:var(--shadow);position:relative;overflow:hidden}
+.stat::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px}
+.stat.error::before{background:var(--error)}.stat.warning::before{background:var(--warning)}
+.stat.info::before{background:var(--info)}.stat.projects::before{background:linear-gradient(var(--brand-a),var(--brand-b))}
+.stat-n{display:block;font-size:24px;font-weight:800;line-height:1.1}
+.stat.error .stat-n{color:var(--error)}.stat.warning .stat-n{color:var(--warning)}.stat.info .stat-n{color:var(--info)}
+.stat-l{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-top:2px;font-weight:600}
+/* Toolbar */
+.toolbar{position:sticky;top:0;z-index:6;display:flex;gap:10px;align-items:center;flex-wrap:wrap;
+background:color-mix(in srgb,var(--bg) 88%,transparent);backdrop-filter:blur(8px);
+border-bottom:1px solid var(--border);padding:10px 24px}
+.toolbar .tb-inner{max-width:1040px;margin:0 auto;display:flex;gap:10px;align-items:center;flex-wrap:wrap;width:100%}
+.toolbar label{display:inline-flex;align-items:center;gap:6px;color:var(--fg);font-size:13px;cursor:pointer;
+padding:5px 10px;border:1px solid var(--border);border-radius:999px;background:var(--panel);user-select:none}
+.toolbar label:hover{border-color:var(--info)}
+.toolbar .spacer{flex:1}
+.toolbar input[type=search]{padding:7px 12px;border:1px solid var(--border);border-radius:999px;background:var(--panel);color:var(--fg);min-width:220px}
+.toolbar input[type=search]:focus{outline:none;border-color:var(--info);box-shadow:0 0 0 3px color-mix(in srgb,var(--info) 20%,transparent)}
+.toolbar button{padding:7px 14px;border:1px solid var(--border);border-radius:999px;background:var(--panel);color:var(--fg);cursor:pointer;font-weight:600}
+.toolbar button:hover{border-color:var(--info);color:var(--info)}
+main{padding:20px 24px 48px;max-width:1040px;margin:0 auto}
+/* Chips */
+.chip{display:inline-flex;align-items:center;padding:2px 10px;border-radius:999px;font-size:12px;font-weight:700;margin-right:6px;color:#fff}
 .chip.error{background:var(--error)}.chip.warning{background:var(--warning)}.chip.info{background:var(--info)}
-.chip.ok{background:var(--ok)}.chip.zero{opacity:.28}
-.project{background:var(--panel);border:1px solid var(--border);border-radius:10px;margin:12px 0;overflow:hidden}
-.project>summary{list-style:none;cursor:pointer;padding:12px 14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.chip.ok{background:var(--ok)}.chip.zero{opacity:.25}
+/* Project card */
+.project{background:var(--panel);border:1px solid var(--border);border-radius:14px;margin:16px 0;overflow:hidden;box-shadow:var(--shadow)}
+.project>summary{list-style:none;cursor:pointer;padding:16px 18px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+border-left:4px solid transparent;transition:background .15s}
+.project>summary:hover{background:var(--panel-2)}
 .project>summary::-webkit-details-marker{display:none}
-.p-name{font-weight:700}.p-chips{margin-left:auto}
-.badge{font-size:11px;color:var(--muted);border:1px solid var(--border);border-radius:6px;padding:1px 6px}
-.p-body{padding:0 14px 14px}
-.path{color:var(--muted);font-size:12px;font-family:ui-monospace,Menlo,Consolas,monospace;word-break:break-all;margin-bottom:8px}
-.bar{display:flex;height:6px;border-radius:4px;overflow:hidden;background:var(--border);margin-bottom:12px}
+.project>summary::before{content:"▸";color:var(--muted);font-size:12px;transition:transform .15s;display:inline-block}
+.project[open]>summary::before{transform:rotate(90deg)}
+.p-name{font-weight:800;font-size:16px}
+.p-chips{margin-left:auto;display:flex;align-items:center}
+.badge{font-size:11px;font-weight:600;color:var(--muted);border:1px solid var(--border);border-radius:6px;padding:2px 8px;background:var(--panel-2)}
+.p-body{padding:4px 18px 18px}
+.path{color:var(--muted);font-size:12px;font-family:ui-monospace,Menlo,Consolas,monospace;word-break:break-all;margin-bottom:10px}
+.bar{display:flex;height:8px;border-radius:999px;overflow:hidden;background:var(--border);margin-bottom:16px}
 .seg{display:block;height:100%}.seg.error{background:var(--error)}.seg.warning{background:var(--warning)}.seg.info{background:var(--info)}.seg.ok{background:var(--ok)}
-.ai{border-left:3px solid var(--info);background:color-mix(in srgb,var(--info) 8%,transparent);padding:8px 12px;border-radius:0 6px 6px 0;margin-bottom:12px}
-.ai-h{font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);margin-bottom:4px}
-.ai.skipped{color:var(--muted);border-left-color:var(--muted);background:transparent}
-.finding{border-top:1px solid var(--border);padding:10px 0}
-.f-head{display:flex;align-items:center;gap:8px}
-.f-icon.error{color:var(--error)}.f-icon.warning{color:var(--warning)}.f-icon.info{color:var(--info)}
-.f-title{font-weight:600}.f-tag{margin-left:auto;font-size:11px;color:var(--muted);border:1px solid var(--border);border-radius:6px;padding:0 6px}
-.f-file{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;color:var(--muted);margin-top:2px}
-.f-detail{margin-top:4px}.f-rec{margin-top:4px;color:var(--ok)}
-.clean{color:var(--ok);padding:8px 0}
-.filtered-note{display:none;color:var(--muted);padding:8px 0}
+/* AI summary */
+.ai{border:1px solid color-mix(in srgb,var(--info) 30%,var(--border));background:color-mix(in srgb,var(--info) 7%,var(--panel));
+padding:12px 14px;border-radius:10px;margin-bottom:16px}
+.ai-h{font-weight:800;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--info);margin-bottom:6px;display:flex;align-items:center;gap:6px}
+.ai-h::before{content:"✦"}
+.ai.skipped{color:var(--muted);border-style:dashed;background:transparent}
+.ai.skipped .ai-h{color:var(--muted)}
+/* Findings */
+.findings{display:flex;flex-direction:column;gap:10px}
+.finding{border:1px solid var(--border);border-left:4px solid var(--muted);border-radius:10px;padding:12px 14px;background:var(--panel-2)}
+.finding.f-error{border-left-color:var(--error)}.finding.f-warning{border-left-color:var(--warning)}.finding.f-info{border-left-color:var(--info)}
+.f-head{display:flex;align-items:center;gap:10px}
+.f-icon{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;font-size:13px;flex:0 0 auto;color:#fff}
+.f-icon.error{background:var(--error)}.f-icon.warning{background:var(--warning)}.f-icon.info{background:var(--info)}
+.f-title{font-weight:700}
+.f-badges{margin-left:auto;display:flex;align-items:center;gap:6px;flex:0 0 auto}
+.f-sev{font-size:11px;font-weight:700;padding:1px 8px;border-radius:999px;color:#fff}
+.f-sev.error{background:var(--error)}.f-sev.warning{background:var(--warning)}.f-sev.info{background:var(--info)}
+.f-tag{font-size:11px;color:var(--muted);border:1px solid var(--border);border-radius:6px;padding:0 6px;background:var(--panel)}
+.f-file{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;color:var(--muted);margin-top:6px}
+.f-detail{margin-top:6px;color:var(--fg)}
+.f-rec{margin-top:8px;color:var(--ok);background:color-mix(in srgb,var(--ok) 8%,transparent);border-radius:8px;padding:6px 10px;font-size:13px}
+.f-rec-i{font-weight:800}
+.clean{color:var(--ok);font-weight:700;padding:14px;text-align:center;background:color-mix(in srgb,var(--ok) 8%,transparent);border-radius:10px}
+.filtered-note{display:none;color:var(--muted);padding:12px;text-align:center}
 .project.filtered-empty .findings{display:none}.project.filtered-empty .filtered-note{display:block}
-.fixprompt{margin-top:14px;border:1px solid var(--border);border-radius:8px;overflow:hidden}
-.fp-head{display:flex;align-items:center;justify-content:space-between;background:var(--bg);padding:7px 10px;font-size:12px;font-weight:600;color:var(--fg)}
-.copy-btn{cursor:pointer;border:1px solid var(--border);background:var(--panel);color:var(--fg);border-radius:6px;padding:3px 12px;font-size:12px}
-.copy-btn:hover{border-color:var(--info)}
-.fp-text{display:block;width:100%;border:0;border-top:1px solid var(--border);background:var(--panel);color:var(--fg);font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;line-height:1.5;padding:10px;resize:vertical}
+/* Fix prompt */
+.fixprompt{margin-bottom:16px;border:1px solid var(--border);border-radius:12px;overflow:hidden;box-shadow:var(--shadow)}
+.fp-head{display:flex;align-items:center;justify-content:space-between;
+background:linear-gradient(90deg,color-mix(in srgb,var(--brand-a) 18%,var(--panel)),color-mix(in srgb,var(--brand-b) 18%,var(--panel)));
+padding:10px 14px;font-size:13px;font-weight:800;color:var(--fg)}
+.copy-btn{cursor:pointer;border:1px solid var(--border);background:var(--panel);color:var(--fg);border-radius:999px;padding:5px 16px;font-size:12px;font-weight:700}
+.copy-btn:hover{border-color:var(--brand-b);color:var(--brand-b)}
+.fp-text{display:block;width:100%;border:0;border-top:1px solid var(--border);background:var(--panel);color:var(--fg);font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12.5px;line-height:1.6;padding:14px;resize:vertical}
 `;
 
 const SCRIPT = [
@@ -205,7 +308,10 @@ export interface BuildHtmlOptions {
 }
 
 /** Build a single self-contained HTML report for one or many project reports. */
-export function buildHtml(reports: HealthReport[], opts: BuildHtmlOptions = {}): string {
+export function buildHtml(
+  reports: HealthReport[],
+  opts: BuildHtmlOptions = {},
+): string {
   const generatedAt = new Date().toISOString();
   const totals = reports.reduce(
     (acc, r) => {
@@ -220,8 +326,22 @@ export function buildHtml(reports: HealthReport[], opts: BuildHtmlOptions = {}):
   const projectCount = reports.length;
   const body = reports.map((r) => renderProject(r, opts.scanRoot)).join("\n");
 
+  const statCard = (cls: string, n: number, label: string): string =>
+    `<div class="stat ${cls}"><span class="stat-n">${n}</span><span class="stat-l">${label}</span></div>`;
+  const stats =
+    '<div class="stats">' +
+    statCard("error", totals.error, "Errors") +
+    statCard("warning", totals.warning, "Warnings") +
+    statCard("info", totals.info, "Info") +
+    statCard(
+      "projects",
+      projectCount,
+      projectCount === 1 ? "Project" : "Projects",
+    ) +
+    "</div>";
+
   const toolbar =
-    '<div class="toolbar">' +
+    '<div class="toolbar"><div class="tb-inner">' +
     '<label><input type="checkbox" data-sev="error" checked> Errors</label>' +
     '<label><input type="checkbox" data-sev="warning" checked> Warnings</label>' +
     '<label><input type="checkbox" data-sev="info" checked> Info</label>' +
@@ -229,18 +349,21 @@ export function buildHtml(reports: HealthReport[], opts: BuildHtmlOptions = {}):
     '<span class="spacer"></span>' +
     '<button id="expandAll">Expand all</button>' +
     '<button id="collapseAll">Collapse all</button>' +
-    "</div>";
+    "</div></div>";
 
   return (
     "<!doctype html>\n" +
     '<html lang="en"><head><meta charset="utf-8">' +
     '<meta name="viewport" content="width=device-width, initial-scale=1">' +
     `<title>${escapeHtml(APP_NAME)} report</title><style>${STYLE}</style></head><body>` +
-    '<header class="top">' +
-    `<div class="brand">${escapeHtml(APP_NAME)}<span class="author">${escapeHtml(AUTHOR)}</span></div>` +
-    `<div class="meta">${projectCount} project${projectCount === 1 ? "" : "s"} · generated ${escapeHtml(generatedAt)}</div>` +
-    `<div class="totals">${countChips(totals)}</div>` +
-    "</header>" +
+    '<header class="hero"><div class="hero-inner">' +
+    '<div class="brand">' +
+    `<span class="brand-name">${escapeHtml(APP_NAME)}</span>` +
+    `<span class="brand-author">${escapeHtml(AUTHOR)}</span>` +
+    "</div>" +
+    `<div class="meta">${projectCount} project${projectCount === 1 ? "" : "s"} analyzed · generated ${escapeHtml(generatedAt)}</div>` +
+    stats +
+    "</div></header>" +
     toolbar +
     `<main>${body}</main>` +
     `<script>${SCRIPT}</script>` +
@@ -255,7 +378,10 @@ export interface EmitOptions {
 }
 
 /** Build the HTML, write it to disk, print the path, and (optionally) open it. */
-export function emitHtmlReport(reports: HealthReport[], opts: EmitOptions): void {
+export function emitHtmlReport(
+  reports: HealthReport[],
+  opts: EmitOptions,
+): void {
   const html = buildHtml(reports, { scanRoot: opts.scanRoot });
   const abs = writeReport(html, opts.outPath);
   console.error(pc.dim(`  report written: ${abs}`));
