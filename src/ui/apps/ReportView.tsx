@@ -1,6 +1,7 @@
 import { Box, Text } from "ink";
 import type { HealthReport, Severity } from "../../core/types.js";
 import { summarize } from "../../core/report.js";
+import { cleanNarrative } from "../../core/narrative.js";
 import { COLOR, SEVERITY_LABEL } from "../theme.js";
 import { FindingCard } from "../components/FindingCard.js";
 import { VerdictBar } from "../components/VerdictBar.js";
@@ -11,6 +12,9 @@ const ORDER: Severity[] = ["error", "warning", "info"];
 /** Full findings report for a single project, rendered in the TUI. */
 export function ReportView({ report }: { report: HealthReport }) {
   const counts = summarize(report.findings);
+  const narrative = report.ai?.narrative
+    ? cleanNarrative(report.ai.narrative)
+    : "";
   const grouped = ORDER.map((sev) => ({
     sev,
     items: report.findings.filter((f) => f.severity === sev),
@@ -44,14 +48,14 @@ export function ReportView({ report }: { report: HealthReport }) {
         )
       )}
 
-      {report.ai?.narrative ? (
+      {narrative ? (
         <Box marginBottom={1}>
           <Panel
             title="AI summary"
             titleColor={COLOR.info}
             borderColor={COLOR.info}
           >
-            <Text>{report.ai.narrative}</Text>
+            <Text>{narrative}</Text>
           </Panel>
         </Box>
       ) : report.ai?.skipped ? (

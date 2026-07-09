@@ -718,12 +718,13 @@ export function createUiHost(): UiHost {
     close: async () => {
       setNode(null);
       instance.unmount();
-      await instance.waitUntilExit();
     },
     reset: async () => {
+      // unmount() is synchronous and resolves Ink's exit promise inline; we must
+      // NOT await waitUntilExit() afterwards (it lazily creates a promise that
+      // never resolves once already unmounted, which would freeze the session).
       setNode(null);
       instance.unmount();
-      await instance.waitUntilExit();
       instance = mount();
     },
   };
