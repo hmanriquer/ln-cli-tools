@@ -17,6 +17,7 @@ import { FileList } from "./components/FileList.js";
 import { TaskList, type Task } from "./components/TaskList.js";
 import { StatusHex } from "./components/StatusHex.js";
 import { YesNoSelect } from "./components/YesNoSelect.js";
+import { BreathingChevron } from "./components/BreathingChevron.js";
 import { PulseGlyph } from "./components/PulseGlyph.js";
 import { ReportView } from "./apps/ReportView.js";
 import { COLOR, GLYPH } from "./theme.js";
@@ -82,7 +83,7 @@ export interface MenuOption {
 function Label({ message }: { message: string }) {
   return (
     <Box>
-      <Text color={COLOR.brandB}>{GLYPH.chevron} </Text>
+      <BreathingChevron />
       <Text bold>{message}</Text>
     </Box>
   );
