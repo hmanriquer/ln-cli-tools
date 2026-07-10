@@ -3,14 +3,12 @@ import Gradient from "ink-gradient";
 import BigText from "ink-big-text";
 import { AUTHOR, TAGLINE } from "../../cli/brand.js";
 import { BRAND, COLOR, GLYPH } from "../theme.js";
-import { PulseGlyph } from "./PulseGlyph.js";
 
 /**
  * Big gradient wordmark (CRYSTAL over PULSE). The byline sits to the right of
  * "Pulse" only — not vertically centered against the full two-line block.
  *
- * BigText uses a stable gradient (no shifting colors) to avoid flicker.
- * Only the small byline pulse animates.
+ * Fully static so it can live inside <Static> without causing flicker.
  */
 export function Wordmark() {
   const colors = [...BRAND.gradient];
@@ -24,7 +22,7 @@ export function Wordmark() {
           <BigText text="Pulse" font="block" space={false} />
         </Gradient>
         <Box marginLeft={2} flexDirection="row" alignItems="center">
-          <PulseGlyph />
+          <Text color={COLOR.brandB}>{GLYPH.star} </Text>
           <Text bold color={COLOR.brandB}>
             {AUTHOR}
           </Text>
