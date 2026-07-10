@@ -20,6 +20,7 @@ import { APP_NAME, AUTHOR } from "./brand.js";
 import { analyzeProject } from "./commands/analyzeProject.js";
 import { resolveRoot } from "./commands/check.js";
 import { emitHtmlReport } from "./html.js";
+import { copyFirstFixPrompt } from "./render.js";
 import { createUiHost, type UiHost } from "../ui/menu.js";
 import type { RunHooks } from "../ui/apps/RunApp.js";
 import { COLOR } from "../ui/theme.js";
@@ -246,7 +247,10 @@ async function runScanFlow(ui: UiHost): Promise<number> {
         onActivity: hooks.onActivity,
         onPhase: hooks.onPhase,
       }),
-    (rs) => emitHtmlReport(rs, { outPath, open: true, scanRoot }),
+    (rs) => {
+      emitHtmlReport(rs, { outPath, open: true, scanRoot });
+      void copyFirstFixPrompt(rs, scanRoot);
+    },
   );
   return computeExitCode(reports.flatMap((r) => r.findings));
 }
