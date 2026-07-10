@@ -1,11 +1,5 @@
 import { Box, Static, Text, render, useInput } from "ink";
-import {
-  Select,
-  TextInput,
-  PasswordInput,
-  ConfirmInput,
-  ProgressBar,
-} from "@inkjs/ui";
+import { Select, TextInput, PasswordInput, ProgressBar } from "@inkjs/ui";
 import {
   useEffect,
   useRef,
@@ -22,6 +16,7 @@ import { FooterBar } from "./components/FooterBar.js";
 import { FileList } from "./components/FileList.js";
 import { TaskList, type Task } from "./components/TaskList.js";
 import { StatusHex } from "./components/StatusHex.js";
+import { YesNoSelect } from "./components/YesNoSelect.js";
 import { ReportView } from "./apps/ReportView.js";
 import { COLOR, GLYPH } from "./theme.js";
 import type { RunHooks, RunMeta } from "./apps/RunApp.js";
@@ -236,13 +231,12 @@ function ConfirmView({
     { isActive: Boolean(process.stdin.isTTY) },
   );
   return (
-    <Box>
-      <Text color={COLOR.brandB}>{GLYPH.chevron} </Text>
-      <Text bold>{message} </Text>
-      <ConfirmInput
-        defaultChoice={initial ? "confirm" : "cancel"}
-        onConfirm={() => onDone(true)}
-        onCancel={() => onDone(false)}
+    <Box flexDirection="column">
+      <Label message={message} />
+      <YesNoSelect initial={initial} onSelect={(value) => onDone(value)} />
+      <FooterBar
+        items={[]}
+        hints={["↑↓ navigate", "enter select", "esc cancel"]}
       />
     </Box>
   );

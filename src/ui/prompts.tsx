@@ -1,6 +1,7 @@
 import { Box, Text, render, useApp, useInput } from "ink";
-import { Select, TextInput, PasswordInput, ConfirmInput } from "@inkjs/ui";
+import { Select, TextInput, PasswordInput } from "@inkjs/ui";
 import { useState, type ReactElement } from "react";
+import { YesNoSelect } from "./components/YesNoSelect.js";
 import { COLOR, GLYPH } from "./theme.js";
 
 /** Render an Ink prompt element and resolve once it signals completion. */
@@ -181,25 +182,25 @@ function ConfirmPrompt({
     }
   });
   return (
-    <Box>
-      <Text color={COLOR.brandB}>{GLYPH.chevron} </Text>
-      <Text bold>{message} </Text>
-      <ConfirmInput
-        defaultChoice={initial ? "confirm" : "cancel"}
-        onConfirm={() => {
-          onDone(true);
-          exit();
-        }}
-        onCancel={() => {
-          onDone(false);
+    <Box flexDirection="column">
+      <PromptLabel message={message} />
+      <YesNoSelect
+        initial={initial}
+        onSelect={(value) => {
+          onDone(value);
           exit();
         }}
       />
+      <Box marginTop={1}>
+        <Text color={COLOR.muted} dimColor>
+          ↑↓ navigate   enter select   esc cancel
+        </Text>
+      </Box>
     </Box>
   );
 }
 
-/** Yes/no confirmation. Resolves true/false, or null if cancelled with Esc. */
+/** Yes/no confirmation via arrow-key selector. Resolves true/false, or null if cancelled with Esc. */
 export function promptConfirm(
   message: string,
   initial = true,
