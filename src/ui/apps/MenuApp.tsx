@@ -3,6 +3,7 @@ import { Select } from "@inkjs/ui";
 import { Wordmark } from "../components/Wordmark.js";
 import { Panel } from "../components/Panel.js";
 import { FooterBar } from "../components/FooterBar.js";
+import { PulseGlyph } from "../components/PulseGlyph.js";
 import { COLOR, GLYPH } from "../theme.js";
 
 export interface MenuOption {
@@ -46,6 +47,7 @@ export function MenuApp({
         </Box>
       ) : null}
       <Box marginBottom={1}>
+        <PulseGlyph />
         <Text bold>What would you like to do?</Text>
       </Box>
       <Select

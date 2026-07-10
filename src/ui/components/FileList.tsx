@@ -1,4 +1,5 @@
 import { Box, Text } from "ink";
+import { useEffect, useState } from "react";
 import { COLOR } from "../theme.js";
 
 export interface FileListProps {
@@ -9,22 +10,43 @@ export interface FileListProps {
   expanded?: boolean;
 }
 
-/** Dim, monospace file paths with a "N more" truncation line, like the reference UI. */
+/** Dim file paths with a brief highlight flash when a new file appears. */
 export function FileList({
   files,
   limit = 4,
   expanded = false,
 }: FileListProps) {
+  const [flash, setFlash] = useState<string | null>(null);
+  const latest = files.length > 0 ? files[files.length - 1]! : null;
+
+  useEffect(() => {
+    if (!latest) return;
+    setFlash(latest);
+    const id = setTimeout(() => setFlash(null), 450);
+    return () => clearTimeout(id);
+  }, [latest]);
+
   if (files.length === 0) return null;
-  const shown = expanded ? files : files.slice(0, limit);
+  // Show the most recent paths so the live stream feels alive.
+  const shown = expanded ? files : files.slice(-limit);
   const hidden = files.length - shown.length;
+
   return (
     <Box flexDirection="column">
-      {shown.map((file, i) => (
-        <Text key={`${file}-${i}`} color={COLOR.muted}>
-          {file}
-        </Text>
-      ))}
+      {shown.map((file, i) => {
+        const isLatest = file === latest && i === shown.length - 1;
+        const highlighted = isLatest && flash === file;
+        return (
+          <Text
+            key={`${file}-${i}`}
+            color={highlighted ? COLOR.brandA : COLOR.muted}
+            bold={highlighted}
+          >
+            {highlighted ? "› " : "  "}
+            {file}
+          </Text>
+        );
+      })}
       {hidden > 0 ? (
         <Text color={COLOR.muted} dimColor>
           {hidden} more (ctrl+r to expand)

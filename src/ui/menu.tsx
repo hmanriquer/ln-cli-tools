@@ -17,6 +17,7 @@ import { FileList } from "./components/FileList.js";
 import { TaskList, type Task } from "./components/TaskList.js";
 import { StatusHex } from "./components/StatusHex.js";
 import { YesNoSelect } from "./components/YesNoSelect.js";
+import { PulseGlyph } from "./components/PulseGlyph.js";
 import { ReportView } from "./apps/ReportView.js";
 import { COLOR, GLYPH } from "./theme.js";
 import type { RunHooks, RunMeta } from "./apps/RunApp.js";
@@ -127,6 +128,7 @@ function MenuView({
         </Box>
       ) : null}
       <Box marginBottom={1}>
+        <PulseGlyph />
         <Text bold>What would you like to do?</Text>
       </Box>
       <Select options={items} onChange={(v) => onSelect(v)} />

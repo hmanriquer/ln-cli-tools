@@ -1,6 +1,10 @@
 import { Box, Text } from "ink";
-import { Spinner } from "@inkjs/ui";
-import { COLOR, GLYPH } from "../theme.js";
+import { ASCII_MODE, COLOR, GLYPH } from "../theme.js";
+import {
+  SPINNER_ASCII,
+  SPINNER_FRAMES,
+  useFrames,
+} from "../hooks/useFrames.js";
 
 export interface StatusHexProps {
   label: string;
@@ -15,12 +19,13 @@ export function StatusHex({
   color = COLOR.ok,
   active = true,
 }: StatusHexProps) {
+  const frames = ASCII_MODE ? SPINNER_ASCII : SPINNER_FRAMES;
+  const frame = useFrames(frames, 80, active);
+
   return (
     <Box>
       {active ? (
-        <Box marginRight={1}>
-          <Spinner />
-        </Box>
+        <Text color={color}>{frame} </Text>
       ) : (
         <Text color={color}>{GLYPH.hex} </Text>
       )}

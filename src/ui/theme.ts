@@ -53,6 +53,9 @@ export const GLYPH = {
   chevron: ascii ? ">" : "›",
 } as const;
 
+/** Whether the terminal prefers ASCII glyphs (no Unicode animation frames). */
+export const ASCII_MODE = ascii;
+
 export const SEVERITY_GLYPH: Record<Severity, string> = {
   error: GLYPH.error,
   warning: GLYPH.warning,
