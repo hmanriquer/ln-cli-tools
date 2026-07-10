@@ -5,6 +5,7 @@ import { computeExitCode, summarize } from "../../core/report.js";
 import type { HealthReport, Severity } from "../../core/types.js";
 import { discoverProjects } from "../../infra/discover.js";
 import { emitHtmlReport } from "../html.js";
+import { renderFixPrompts } from "../render.js";
 import { scanWithTui } from "../../ui/run.js";
 import type { RunHooks } from "../../ui/apps/RunApp.js";
 import { analyzeProject } from "./analyzeProject.js";
@@ -152,6 +153,10 @@ export async function runScan(opts: ScanOptions): Promise<number> {
     );
   } else if (!useTui) {
     renderScanSummary(scanRoot, reports);
+    await renderFixPrompts(reports, scanRoot);
+  } else {
+    // TUI already showed per-project status; still surface fix prompts + clipboard.
+    await renderFixPrompts(reports, scanRoot);
   }
 
   const outPath = opts.out ?? path.join(scanRoot, "crystal-pulse-report.html");

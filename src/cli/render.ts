@@ -1,10 +1,19 @@
+import path from "node:path";
 import pc from "picocolors";
 import type { Finding, HealthReport, Severity } from "../core/types.js";
 import { summarize } from "../core/report.js";
 import { cleanNarrative } from "../core/narrative.js";
+import { buildFixPrompt } from "../core/fixPrompt.js";
+import { copyToClipboard } from "../infra/clipboard.js";
 import { APP_NAME, AUTHOR, SHORT_TAGLINE } from "./brand.js";
 
 type Colorize = (text: string) => string;
+
+/** Claude brand coral via 24-bit ANSI, gated on color support. */
+function claude(text: string): string {
+  if (!pc.isColorSupported) return text;
+  return `\x1b[38;2;217;119;87m${text}\x1b[39m`;
+}
 
 const SYMBOL: Record<Severity, string> = {
   error: "✖",
@@ -96,10 +105,57 @@ function renderSection(severity: Severity, items: Finding[]): void {
   }
 }
 
-/** Human-readable report. */
-export function renderReport(report: HealthReport): void {
+function projectLabel(report: HealthReport, scanRoot?: string): string {
+  if (scanRoot) {
+    const rel = path.relative(scanRoot, report.root);
+    if (rel && !rel.startsWith("..")) return rel.split(path.sep).join("/");
+  }
+  return path.basename(report.root) || report.root;
+}
+
+/**
+ * Print a fix prompt block, copy it to the clipboard, and show the
+ * Coming soon Claude Code CTA. Returns whether a prompt was shown.
+ */
+async function renderOneFixPrompt(
+  report: HealthReport,
+  opts: { name: string; copy: boolean; copiedNote?: string },
+): Promise<boolean> {
+  const prompt = buildFixPrompt(report, opts.name);
+  if (!prompt) return false;
+
+  console.log(pc.bold(pc.magenta("Fix prompt (Claude)")));
+  console.log(pc.dim("─".repeat(48)));
+  for (const line of prompt.split("\n")) {
+    console.log(pc.dim(line));
+  }
+  console.log(pc.dim("─".repeat(48)));
+
+  if (opts.copy) {
+    const ok = await copyToClipboard(prompt);
+    if (ok) {
+      console.log(
+        pc.green(
+          `  ✓ Copied to clipboard${opts.copiedNote ? ` (${opts.copiedNote})` : ""}`,
+        ),
+      );
+    } else {
+      console.log(pc.dim("  (Could not copy to clipboard — copy the prompt above manually.)"));
+    }
+  }
+
+  console.log(
+    `  ${claude("✳")} ${pc.bold(claude("Open in Claude Code"))} ${pc.dim("·")} ${pc.dim("coming soon")}`,
+  );
+  console.log("");
+  return true;
+}
+
+/** Human-readable report. Auto-copies the fix prompt when present. */
+export async function renderReport(report: HealthReport): Promise<void> {
   const { findings } = report;
   const counts = summarize(findings);
+  const name = projectLabel(report);
 
   console.log("");
   console.log(`${pc.dim("target:")} ${report.root}`);
@@ -107,6 +163,8 @@ export function renderReport(report: HealthReport): void {
     `${pc.dim("stacks:")} ${report.stacks.join(", ") || pc.dim("unknown")}`,
   );
   console.log("");
+
+  await renderOneFixPrompt(report, { name, copy: true });
 
   if (findings.length === 0) {
     console.log(pc.green("  ✓ No findings — looks healthy. 🎉"));
@@ -131,6 +189,49 @@ export function renderReport(report: HealthReport): void {
   }
 
   renderSummaryBox(counts);
+}
+
+/**
+ * Print fix prompts for a multi-project scan. Copies only the first
+ * non-empty prompt to avoid overwriting the clipboard N times.
+ */
+export async function renderFixPrompts(
+  reports: HealthReport[],
+  scanRoot?: string,
+): Promise<void> {
+  let copied = false;
+  for (const report of reports) {
+    const name = projectLabel(report, scanRoot);
+    const prompt = buildFixPrompt(report, name);
+    if (!prompt) continue;
+
+    console.log(pc.bold(`${name}`));
+    const didCopy = !copied;
+    const shown = await renderOneFixPrompt(report, {
+      name,
+      copy: didCopy,
+      copiedNote: didCopy ? name : undefined,
+    });
+    if (shown && didCopy) copied = true;
+  }
+}
+
+/**
+ * Copy the first non-empty fix prompt from a set of reports.
+ * Returns the project name that was copied, or null if none / copy failed.
+ */
+export async function copyFirstFixPrompt(
+  reports: HealthReport[],
+  scanRoot?: string,
+): Promise<string | null> {
+  for (const report of reports) {
+    const name = projectLabel(report, scanRoot);
+    const prompt = buildFixPrompt(report, name);
+    if (!prompt) continue;
+    const ok = await copyToClipboard(prompt);
+    return ok ? name : null;
+  }
+  return null;
 }
 
 function renderSummaryBox(counts: Record<Severity, number>): void {

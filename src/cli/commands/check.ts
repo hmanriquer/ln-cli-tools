@@ -102,7 +102,7 @@ export async function runCheck(opts: CheckOptions): Promise<number> {
       },
     });
     if (opts.json) renderJson(report);
-    else renderReport(report);
+    else await renderReport(report);
   }
 
   if (opts.html) {
