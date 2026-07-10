@@ -1,4 +1,4 @@
-import { Box, Static, Text, render, useInput } from "ink";
+import { Box, Text, render, useInput } from "ink";
 import { Select, TextInput, PasswordInput, ProgressBar } from "@inkjs/ui";
 import {
   useEffect,
@@ -17,6 +17,7 @@ import { FileList } from "./components/FileList.js";
 import { TaskList, type Task } from "./components/TaskList.js";
 import { StatusHex } from "./components/StatusHex.js";
 import { YesNoSelect } from "./components/YesNoSelect.js";
+import { BreathingChevron } from "./components/BreathingChevron.js";
 import { PulseGlyph } from "./components/PulseGlyph.js";
 import { ReportView } from "./apps/ReportView.js";
 import { COLOR, GLYPH } from "./theme.js";
@@ -50,25 +51,18 @@ function getSnapshot(): Frame | null {
   return current;
 }
 
-/** Stable single-item list so <Static> paints the header exactly once. */
-const HEADER_ITEMS: string[] = ["wordmark"];
-
 /**
- * Persistent shell. The wordmark is painted once inside <Static> — Ink never
- * re-renders Static output, so it stays pinned on top without flickering while
- * the live body below (spinner, progress, file list) updates in place.
+ * Persistent shell. The wordmark renders normally (not inside <Static>) so
+ * the small byline pulse can animate. BigText output is stable each render,
+ * so Ink's diff renderer only repaints the single pulsing character.
  */
 function Shell() {
   const frame = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
   return (
     <Box flexDirection="column">
-      <Static items={HEADER_ITEMS}>
-        {(item) => (
-          <Box key={item} paddingX={1} paddingTop={1}>
-            <Wordmark />
-          </Box>
-        )}
-      </Static>
+      <Box paddingX={1} paddingTop={1}>
+        <Wordmark />
+      </Box>
       {frame ? (
         <Box key={frame.key} flexDirection="column" paddingX={1}>
           {frame.node}
@@ -89,7 +83,7 @@ export interface MenuOption {
 function Label({ message }: { message: string }) {
   return (
     <Box>
-      <Text color={COLOR.brandB}>{GLYPH.chevron} </Text>
+      <BreathingChevron />
       <Text bold>{message}</Text>
     </Box>
   );

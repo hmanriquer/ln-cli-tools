@@ -2,7 +2,8 @@ import { Box, Text, render, useApp, useInput } from "ink";
 import { Select, TextInput, PasswordInput } from "@inkjs/ui";
 import { useState, type ReactElement } from "react";
 import { YesNoSelect } from "./components/YesNoSelect.js";
-import { COLOR, GLYPH } from "./theme.js";
+import { BreathingChevron } from "./components/BreathingChevron.js";
+import { COLOR } from "./theme.js";
 
 /** Render an Ink prompt element and resolve once it signals completion. */
 async function mountPrompt<T>(
@@ -20,7 +21,7 @@ async function mountPrompt<T>(
 function PromptLabel({ message }: { message: string }) {
   return (
     <Box>
-      <Text color={COLOR.brandB}>{GLYPH.chevron} </Text>
+      <BreathingChevron />
       <Text bold>{message}</Text>
     </Box>
   );

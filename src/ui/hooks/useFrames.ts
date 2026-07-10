@@ -25,10 +25,5 @@ export function useFrames(
 /** Soft brand pulse: cycles a glyph through dim → bright → dim. */
 export const PULSE_FRAMES = ["·", "✦", "✧", "✦"] as const;
 
-/** Braille-style spinner for status lines (ASCII-safe fallback handled by caller). */
-export const SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"] as const;
-
-export const SPINNER_ASCII = ["|", "/", "-", "\\"] as const;
-
-/** Animated ellipsis for "Working…" style labels. */
-export const ELLIPSIS_FRAMES = ["   ", ".  ", ".. ", "..."] as const;
+/** Soft breathing chevron for idle prompts. */
+export const CHEVRON_FRAMES = ["›", "·", "›", " "] as const;
