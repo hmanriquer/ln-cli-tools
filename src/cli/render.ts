@@ -1,6 +1,7 @@
 import pc from "picocolors";
 import type { Finding, HealthReport, Severity } from "../core/types.js";
 import { summarize } from "../core/report.js";
+import { cleanNarrative } from "../core/narrative.js";
 import { APP_NAME, AUTHOR, SHORT_TAGLINE } from "./brand.js";
 
 type Colorize = (text: string) => string;
@@ -117,9 +118,12 @@ export function renderReport(report: HealthReport): void {
     renderSection("info", groups.info);
   }
 
-  if (report.ai?.narrative) {
-    console.log(pc.bold("AI summary"));
-    console.log(`  ${report.ai.narrative.replace(/\n/g, "\n  ")}`);
+  const narrative = report.ai?.narrative
+    ? cleanNarrative(report.ai.narrative)
+    : "";
+  if (narrative) {
+    console.log(pc.bold(pc.cyan("AI summary")));
+    console.log(pc.dim("  ") + narrative.replaceAll("\n", "\n  "));
     console.log("");
   } else if (report.ai?.skipped) {
     console.log(pc.dim(`AI analysis skipped: ${report.ai.skipped}`));

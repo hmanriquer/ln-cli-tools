@@ -1,6 +1,4 @@
 import { Command, Option } from "commander";
-import * as p from "@clack/prompts";
-import pc from "picocolors";
 import {
   credentialsDisplayPath,
   hasCredentials,
@@ -8,12 +6,17 @@ import {
   storeCredential,
 } from "../infra/credentials.js";
 import type { Stack } from "../core/types.js";
-import { PROVIDER_CHOICES, providerConfigured, resolveProviderId } from "../ai/providers.js";
+import {
+  PROVIDER_CHOICES,
+  providerConfigured,
+  resolveProviderId,
+} from "../ai/providers.js";
 import { runCheck } from "./commands/check.js";
 import { runScan } from "./commands/scan.js";
 import { promptForApiKey, promptForCheck } from "./interactive.js";
 import { renderBanner, renderNoKeyWarning } from "./render.js";
 import { runMenu } from "./menu.js";
+import { logSuccess } from "../ui/notice.js";
 
 interface CheckCliOptions {
   json?: boolean;
@@ -57,7 +60,8 @@ function requestedStacksFrom(options: CheckCliOptions): Stack[] {
  */
 async function maybePromptForAnthropicKey(providerOpt: string): Promise<void> {
   const onAnthropicTrack =
-    providerOpt === "anthropic" || (providerOpt === "auto" && resolveProviderId() === null);
+    providerOpt === "anthropic" ||
+    (providerOpt === "auto" && resolveProviderId() === null);
   if (!onAnthropicTrack || hasCredentials()) return;
 
   const result = await promptForApiKey({ silent: true });
@@ -65,7 +69,7 @@ async function maybePromptForAnthropicKey(providerOpt: string): Promise<void> {
   process.env.ANTHROPIC_API_KEY = result.key;
   if (result.save) {
     storeCredential("ANTHROPIC_API_KEY", result.key);
-    p.log.success(`Saved to ${pc.dim(credentialsDisplayPath())}.`);
+    logSuccess(`Saved to ${credentialsDisplayPath()}.`);
   }
 }
 
@@ -74,7 +78,9 @@ export function buildProgram(): Command {
 
   program
     .name("crystal-pulse")
-    .description("Crystal Pulse — AI-assisted health-check multitool for React, Angular and Node.js codebases.")
+    .description(
+      "Crystal Pulse — AI-assisted health-check multitool for React, Angular and Node.js codebases.",
+    )
     .version("0.2.0")
     .option("--ui", "launch the interactive arrow-key menu")
     .action(async () => {
@@ -96,7 +102,10 @@ export function buildProgram(): Command {
   program
     .command("check")
     .description("Run a health check. Usage: hc check [stack] [path]")
-    .argument("[stack]", "node | react | angular (omit to auto-detect, or pass a path here)")
+    .argument(
+      "[stack]",
+      "node | react | angular (omit to auto-detect, or pass a path here)",
+    )
     .argument("[path]", "project directory")
     .option("--json", "output machine-readable JSON", false)
     .option("--no-ai", "skip the AI analysis layer (deterministic probes only)")
@@ -104,17 +113,27 @@ export function buildProgram(): Command {
     .option("--angular-health", "scope the run to Angular checks")
     .option("--node-health", "scope the run to Node.js checks")
     .addOption(
-      new Option("--provider <id>", "AI provider").choices([...PROVIDER_CHOICES]).default("auto"),
+      new Option("--provider <id>", "AI provider")
+        .choices([...PROVIDER_CHOICES])
+        .default("auto"),
     )
     .option("--model <id>", "override the model")
-    .option("--effort <level>", "reasoning effort: low | medium | high | xhigh | max")
+    .option(
+      "--effort <level>",
+      "reasoning effort: low | medium | high | xhigh | max",
+    )
     .option("--html", "also write and open a self-contained HTML report", false)
-    .option("--out <file>", "path for the HTML report (default <root>/crystal-pulse-report.html)")
+    .option(
+      "--out <file>",
+      "path for the HTML report (default <root>/crystal-pulse-report.html)",
+    )
     .option("--no-open", "don't open the HTML report in a browser")
     .action(async (stackArg, pathArg, options: CheckCliOptions) => {
       const json = Boolean(options.json);
       const interactive = Boolean(process.stdout.isTTY) && !json;
-      const args = [stackArg, pathArg].filter((v): v is string => typeof v === "string");
+      const args = [stackArg, pathArg].filter(
+        (v): v is string => typeof v === "string",
+      );
 
       const requestedStacks = requestedStacksFrom(options);
       const hasHealthFlags = requestedStacks.length > 0;
@@ -129,7 +148,11 @@ export function buildProgram(): Command {
 
       // Top-of-screen heads-up when the AI is wanted but the provider isn't configured.
       const resolvedProvider = resolveProviderId(providerOpt);
-      if (!json && aiWanted && !(resolvedProvider && providerConfigured(resolvedProvider))) {
+      if (
+        !json &&
+        aiWanted &&
+        !(resolvedProvider && providerConfigured(resolvedProvider))
+      ) {
         renderNoKeyWarning(
           providerOpt === "github-models"
             ? "Set GITHUB_TOKEN (a PAT with models:read), or pass --no-ai to skip AI."
@@ -147,7 +170,8 @@ export function buildProgram(): Command {
         aiWanted = answers.ai;
       }
 
-      if (aiWanted && interactive) await maybePromptForAnthropicKey(providerOpt);
+      if (aiWanted && interactive)
+        await maybePromptForAnthropicKey(providerOpt);
 
       const code = await runCheck({
         args,
@@ -169,18 +193,34 @@ export function buildProgram(): Command {
 
   program
     .command("scan")
-    .description("Discover & analyze every project under a directory; opens a combined HTML report.")
+    .description(
+      "Discover & analyze every project under a directory; opens a combined HTML report.",
+    )
     .argument("[path]", "directory to scan (defaults to the current directory)")
-    .option("--json", "output combined JSON instead of the terminal summary", false)
+    .option(
+      "--json",
+      "output combined JSON instead of the terminal summary",
+      false,
+    )
     .option("--no-ai", "skip the AI analysis layer (probes only)")
     .addOption(
-      new Option("--provider <id>", "AI provider").choices([...PROVIDER_CHOICES]).default("auto"),
+      new Option("--provider <id>", "AI provider")
+        .choices([...PROVIDER_CHOICES])
+        .default("auto"),
     )
     .option("--model <id>", "override the model")
-    .option("--effort <level>", "reasoning effort: low | medium | high | xhigh | max")
-    .option("--out <file>", "path for the HTML report (default <scan-root>/crystal-pulse-report.html)")
+    .option(
+      "--effort <level>",
+      "reasoning effort: low | medium | high | xhigh | max",
+    )
+    .option(
+      "--out <file>",
+      "path for the HTML report (default <scan-root>/crystal-pulse-report.html)",
+    )
     .option("--no-open", "don't open the HTML report in a browser")
-    .option("--depth <n>", "max directory depth to search for projects", (v) => Number.parseInt(v, 10))
+    .option("--depth <n>", "max directory depth to search for projects", (v) =>
+      Number.parseInt(v, 10),
+    )
     .action(async (pathArg, options: ScanCliOptions) => {
       const json = Boolean(options.json);
       const interactive = Boolean(process.stdout.isTTY) && !json;
@@ -198,7 +238,8 @@ export function buildProgram(): Command {
             : undefined,
         );
       }
-      if (aiWanted && interactive) await maybePromptForAnthropicKey(providerOpt);
+      if (aiWanted && interactive)
+        await maybePromptForAnthropicKey(providerOpt);
 
       const code = await runScan({
         args: typeof pathArg === "string" ? [pathArg] : [],

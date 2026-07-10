@@ -2,6 +2,7 @@ import path from "node:path";
 import pc from "picocolors";
 import { summarize } from "../core/report.js";
 import { buildFixPrompt } from "../core/fixPrompt.js";
+import { cleanNarrative } from "../core/narrative.js";
 import type { Finding, HealthReport, Severity } from "../core/types.js";
 import { openInBrowser, writeReport } from "../infra/reportOutput.js";
 import { APP_NAME, AUTHOR } from "./brand.js";
@@ -81,34 +82,6 @@ function renderFinding(f: Finding): string {
     );
   lines.push("</div>");
   return lines.join("");
-}
-
-/**
- * Turn a raw AI narrative into clean prose for display. Some providers return
- * the whole `{ narrative, findings }` payload as text; extract just the
- * narrative. Strips ```json fences, and drops the block entirely when the text
- * is a bare JSON blob with no usable prose.
- */
-function cleanNarrative(raw: string): string {
-  let text = raw.trim();
-  const fence = /^```(?:json)?\n?([\s\S]*?)\n?```$/i.exec(text);
-  if (fence?.[1]) text = fence[1].trim();
-
-  if (text.startsWith("{") || text.startsWith("[")) {
-    try {
-      const parsed = JSON.parse(text) as unknown;
-      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-        const narrative = (parsed as Record<string, unknown>)["narrative"];
-        if (typeof narrative === "string" && narrative.trim())
-          return narrative.trim();
-      }
-      // Parsed as JSON but no usable narrative — nothing worth showing.
-      return "";
-    } catch {
-      // Not valid JSON; fall through and show the text as-is.
-    }
-  }
-  return text;
 }
 
 function renderProject(report: HealthReport, scanRoot?: string): string {
